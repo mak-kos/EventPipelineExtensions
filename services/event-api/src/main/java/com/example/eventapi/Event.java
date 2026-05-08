@@ -18,6 +18,9 @@ public class Event {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String payload;
 
+    @Column(length = 255)
+    private String type;
+
     @Column(nullable = false, length = 50)
     private String status;
 
@@ -29,6 +32,9 @@ public class Event {
 
     public String getPayload() { return payload; }
     public void setPayload(String payload) { this.payload = payload; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
