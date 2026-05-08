@@ -1,17 +1,48 @@
 {
   "info": {
     "name": "Event Pipeline",
-    "description": "Sample requests for the event-api service.",
+    "description": "Sample requests for the event-api (Java) and event-processor (Python) services. Run /auth/login first; the test script captures the bearer token into the {{token}} variable used by the protected requests.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "POST /events — basic",
+      "name": "auth-api / POST /auth/login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body.token) { pm.collectionVariables.set('token', body.token); }",
+              "pm.test('login returns 200 with token', function () {",
+              "    pm.expect(pm.response.code).to.eql(200);",
+              "    pm.expect(body).to.have.property('token');",
+              "    pm.expect(body).to.have.property('expiresAt');",
+              "});"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "event-api / POST /events — basic (open)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"type\": \"user.signup\",\n  \"userId\": \"u-12345\",\n  \"email\": \"alice@example.com\",\n  \"source\": \"web\"\n}"
@@ -24,12 +55,10 @@
       }
     },
     {
-      "name": "POST /events — nested payload",
+      "name": "event-api / POST /events — nested payload (open)",
       "request": {
         "method": "POST",
-        "header": [
-          { "key": "Content-Type", "value": "application/json" }
-        ],
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"type\": \"order.created\",\n  \"order\": {\n    \"id\": \"ord-998\",\n    \"total\": 42.50,\n    \"items\": [\n      { \"sku\": \"abc\", \"qty\": 2 },\n      { \"sku\": \"xyz\", \"qty\": 1 }\n    ]\n  }\n}"
@@ -40,9 +69,98 @@
           "path": ["events"]
         }
       }
+    },
+    {
+      "name": "event-api / GET /events (paginated, requires USER)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/events?type=user.signup&page=0&size=20",
+          "host": ["{{baseUrl}}"],
+          "path": ["events"],
+          "query": [
+            { "key": "type", "value": "user.signup" },
+            { "key": "page", "value": "0" },
+            { "key": "size", "value": "20" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "event-api / GET /events/{id} (requires USER)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/events/{{eventId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["events", "{{eventId}}"]
+        }
+      }
+    },
+    {
+      "name": "event-api / GET /stats/summary (requires USER)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/stats/summary",
+          "host": ["{{baseUrl}}"],
+          "path": ["stats", "summary"]
+        }
+      }
+    },
+    {
+      "name": "event-api / DELETE /events/{id} (requires ADMIN)",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/events/{{eventId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["events", "{{eventId}}"]
+        }
+      }
+    },
+    {
+      "name": "event-processor / GET /health",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{processorUrl}}/health",
+          "host": ["{{processorUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "event-processor / GET /events/{id}/status",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{processorUrl}}/events/{{eventId}}/status",
+          "host": ["{{processorUrl}}"],
+          "path": ["events", "{{eventId}}", "status"]
+        }
+      }
+    },
+    {
+      "name": "event-processor / POST /events/{id}/replay",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "{{processorUrl}}/events/{{eventId}}/replay",
+          "host": ["{{processorUrl}}"],
+          "path": ["events", "{{eventId}}", "replay"]
+        }
+      }
     }
   ],
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:8080" }
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "processorUrl", "value": "http://localhost:8081" },
+    { "key": "token", "value": "" },
+    { "key": "eventId", "value": "REPLACE-ME" }
   ]
 }
