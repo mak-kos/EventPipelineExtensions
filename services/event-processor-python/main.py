@@ -1,67 +1,84 @@
+"""event-processor entrypoint.
+
+Wires up the Kafka consumer (in a daemon thread) and the FastAPI HTTP server
+(uvicorn on the main thread). Task 6 replaces the daemon thread with a proper
+worker pool plus graceful shutdown.
 """
-event-processor (Python)
 
-Consumes events from a Kafka topic, transforms each JSON payload into XML,
-and stores the result in a Minio bucket.
-"""
+from __future__ import annotations
 
-import json
-import sys
-import uuid
-from io import BytesIO
+import logging
+import threading
 
-import xmltodict
-from confluent_kafka import Consumer
+import urllib3
+import uvicorn
 from minio import Minio
 
-KAFKA_BOOTSTRAP = "localhost:9092"
-MINIO_ENDPOINT = "localhost:9000"
-MINIO_ACCESS_KEY = "minioadmin"
-MINIO_SECRET_KEY = "minioadmin"
-
-TOPIC = "events"
-BUCKET = "events"
-GROUP_ID = "event-processor-group"
+import config
+from api import build_app
+from consumer import KafkaConsumerLoop
+from processor import MessageProcessor
+from store import EventStore
 
 
-def ensure_bucket(client):
-    if not client.bucket_exists(BUCKET):
-        client.make_bucket(BUCKET)
-        print(f'Created bucket "{BUCKET}"', flush=True)
+# Bound Minio HTTP client so a stalled connection cannot wedge /health or /replay.
+# Connect: 5s. Read: 10s. Bounded retries with backoff.
+_MINIO_HTTP_CLIENT = urllib3.PoolManager(
+    timeout=urllib3.Timeout(connect=5.0, read=10.0),
+    retries=urllib3.Retry(total=2, backoff_factor=0.5,
+                          status_forcelist=[502, 503, 504]),
+)
 
 
-def main():
-    minio_client = Minio(
-        MINIO_ENDPOINT,
-        access_key=MINIO_ACCESS_KEY,
-        secret_key=MINIO_SECRET_KEY,
-        secure=False,
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s - %(message)s",
     )
-    ensure_bucket(minio_client)
 
-    consumer = Consumer({
-        "bootstrap.servers": KAFKA_BOOTSTRAP,
-        "group.id": GROUP_ID,
-        "auto.offset.reset": "earliest",
-    })
-    consumer.subscribe([TOPIC])
 
-    while True:
-        msg = consumer.poll(timeout=1.0)
-        if msg is None:
-            continue
-        if msg.error():
-            print(f"Consumer error: {msg.error()}", file=sys.stderr, flush=True)
-            continue
+def _ensure_bucket(minio_client: Minio, bucket: str) -> None:
+    if not minio_client.bucket_exists(bucket):
+        minio_client.make_bucket(bucket)
+        logging.getLogger(__name__).info("Created Minio bucket %s", bucket)
 
-        data = json.loads(msg.value().decode("utf-8"))
-        xml = xmltodict.unparse({"event": data}, pretty=True)
 
-        filename = f"{uuid.uuid4()}.xml"
-        body = xml.encode("utf-8")
-        minio_client.put_object(BUCKET, filename, BytesIO(body), length=len(body))
+def main() -> None:
+    _configure_logging()
+    log = logging.getLogger(__name__)
 
-        print(f"Saved {filename}", flush=True)
+    store = EventStore()
+    minio_client = Minio(
+        config.MINIO_ENDPOINT,
+        access_key=config.MINIO_ACCESS_KEY,
+        secret_key=config.MINIO_SECRET_KEY,
+        secure=config.MINIO_SECURE,
+        http_client=_MINIO_HTTP_CLIENT,
+    )
+    _ensure_bucket(minio_client, config.MINIO_BUCKET)
+
+    processor = MessageProcessor(minio_client, config.MINIO_BUCKET, store)
+
+    loop = KafkaConsumerLoop(
+        bootstrap=config.KAFKA_BOOTSTRAP,
+        topic=config.KAFKA_TOPIC,
+        group_id=config.KAFKA_GROUP_ID,
+        on_message=processor.process,
+        on_first_seen=store.mark_pending,
+    )
+    consumer_thread = threading.Thread(target=loop.run, name="kafka-consumer", daemon=True)
+    consumer_thread.start()
+
+    app = build_app(
+        store=store,
+        minio_client=minio_client,
+        minio_bucket=config.MINIO_BUCKET,
+        kafka_bootstrap=config.KAFKA_BOOTSTRAP,
+        kafka_health_timeout=config.KAFKA_HEALTH_TIMEOUT,
+    )
+
+    log.info("Starting HTTP server on %s:%s", config.HTTP_HOST, config.HTTP_PORT)
+    uvicorn.run(app, host=config.HTTP_HOST, port=config.HTTP_PORT, log_level=config.LOG_LEVEL.lower())
 
 
 if __name__ == "__main__":
