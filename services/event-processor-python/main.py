@@ -23,11 +23,14 @@ import threading
 
 import urllib3
 import uvicorn
+from confluent_kafka import Producer
 from minio import Minio
 
 import config
 from api import build_app
 from consumer import KafkaConsumerLoop
+from event_api_client import EventApiClient
+from kafka_producer import KafkaPublisher
 from processor import MessageProcessor
 from store import EventStore
 from worker import WorkerPool
@@ -83,12 +86,31 @@ def main() -> int:
     consumer_thread = threading.Thread(target=consumer.run, name="kafka-consumer", daemon=False)
     consumer_thread.start()
 
+    # Replay path: HTTP client to event-api + Kafka producer.
+    event_api_client = EventApiClient(
+        base_url=config.EVENT_API_BASE_URL,
+        username=config.EVENT_API_USERNAME,
+        password=config.EVENT_API_PASSWORD,
+        connect_timeout=config.EVENT_API_CONNECT_TIMEOUT,
+        read_timeout=config.EVENT_API_READ_TIMEOUT,
+    )
+    raw_producer = Producer({
+        "bootstrap.servers": config.KAFKA_BOOTSTRAP,
+        # Conservative bound: a stalled broker should not wedge a replay request.
+        "delivery.timeout.ms": 30000,
+        "request.timeout.ms": 15000,
+        "message.timeout.ms": 30000,
+    })
+    publisher = KafkaPublisher(raw_producer, config.KAFKA_TOPIC)
+
     app = build_app(
         store=store,
         minio_client=minio_client,
         minio_bucket=config.MINIO_BUCKET,
         kafka_bootstrap=config.KAFKA_BOOTSTRAP,
         kafka_health_timeout=config.KAFKA_HEALTH_TIMEOUT,
+        event_api_client=event_api_client,
+        publisher=publisher,
     )
 
     uvicorn_config = uvicorn.Config(
@@ -129,6 +151,17 @@ def main() -> int:
     # 2. Drain pool — workers finish in-flight messages; sentinel-based stop.
     if not pool.shutdown(timeout=config.SHUTDOWN_TIMEOUT_SECONDS):
         exit_code = 1
+
+    # 3. Drain replay producer + close HTTP client.
+    try:
+        remaining = raw_producer.flush(timeout=config.SHUTDOWN_TIMEOUT_SECONDS)
+        if remaining > 0:
+            log.error("Kafka producer flush left %d messages undelivered", remaining)
+            exit_code = 1
+    except Exception:
+        log.exception("Kafka producer flush failed during shutdown")
+        exit_code = 1
+    event_api_client.close()
 
     log.info("event-processor exiting with code %d", exit_code)
     return exit_code
