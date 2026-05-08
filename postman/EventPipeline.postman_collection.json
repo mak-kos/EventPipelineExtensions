@@ -1,0 +1,48 @@
+{
+  "info": {
+    "name": "Event Pipeline",
+    "description": "Sample requests for the event-api service.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "POST /events — basic",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"user.signup\",\n  \"userId\": \"u-12345\",\n  \"email\": \"alice@example.com\",\n  \"source\": \"web\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/events",
+          "host": ["{{baseUrl}}"],
+          "path": ["events"]
+        }
+      }
+    },
+    {
+      "name": "POST /events — nested payload",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"order.created\",\n  \"order\": {\n    \"id\": \"ord-998\",\n    \"total\": 42.50,\n    \"items\": [\n      { \"sku\": \"abc\", \"qty\": 2 },\n      { \"sku\": \"xyz\", \"qty\": 1 }\n    ]\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/events",
+          "host": ["{{baseUrl}}"],
+          "path": ["events"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" }
+  ]
+}
