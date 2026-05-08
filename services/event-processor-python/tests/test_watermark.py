@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from watermark import OffsetWatermark
+from event_processor.watermark import OffsetWatermark
 
 
 def test_initial_state_is_none():

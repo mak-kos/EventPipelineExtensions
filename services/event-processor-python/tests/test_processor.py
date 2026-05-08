@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 
-from processor import MessageProcessor
-from store import EventStore, PROCESSED
+from event_processor.processor import MessageProcessor
+from event_processor.store import EventStore, PROCESSED
 
 
 def _envelope(event_id: str, payload: dict | None = None) -> bytes:

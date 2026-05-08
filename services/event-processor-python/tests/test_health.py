@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import api as api_module
-import health as health_module
+from event_processor import api as api_module
+from event_processor import health as health_module
 import pytest
 from fastapi.testclient import TestClient
 
 
 def _build(monkeypatch, *, kafka_ok=True, minio_ok=True, fake_minio=None, store=None):
-    from api import build_app
-    from store import EventStore
+    from event_processor.api import build_app
+    from event_processor.store import EventStore
 
     if store is None:
         store = EventStore()

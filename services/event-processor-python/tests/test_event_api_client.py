@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from event_api_client import (
+from event_processor.event_api_client import (
     AuthError,
     EventApiClient,
     EventNotFound,

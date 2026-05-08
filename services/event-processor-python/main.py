@@ -26,14 +26,14 @@ import uvicorn
 from confluent_kafka import Producer
 from minio import Minio
 
-import config
-from api import build_app
-from consumer import KafkaConsumerLoop
-from event_api_client import EventApiClient
-from kafka_producer import KafkaPublisher
-from processor import MessageProcessor
-from store import EventStore
-from worker import WorkerPool
+from event_processor import config
+from event_processor.api import build_app
+from event_processor.consumer import KafkaConsumerLoop
+from event_processor.event_api_client import EventApiClient
+from event_processor.kafka_producer import KafkaPublisher
+from event_processor.processor import MessageProcessor
+from event_processor.store import EventStore
+from event_processor.worker import WorkerPool
 
 
 # Bound Minio HTTP client so a stalled connection cannot wedge /health or /replay.

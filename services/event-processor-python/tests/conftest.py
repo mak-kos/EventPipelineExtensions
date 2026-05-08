@@ -51,7 +51,7 @@ def fake_minio() -> FakeMinioClient:
 
 @pytest.fixture
 def store():
-    from store import EventStore
+    from event_processor.store import EventStore
 
     return EventStore()
 
@@ -64,8 +64,8 @@ def fixed_now() -> datetime:
 @pytest.fixture
 def app(monkeypatch, fake_minio, store):
     """Builds the FastAPI app with kafka_reachable / minio_reachable monkey-patched."""
-    from api import build_app
-    import health
+    from event_processor.api import build_app
+    from event_processor import health
 
     monkeypatch.setattr(health, "kafka_reachable", lambda *_a, **_kw: (True, "ok"))
     monkeypatch.setattr(health, "minio_reachable", lambda *_a, **_kw: (True, "ok"))

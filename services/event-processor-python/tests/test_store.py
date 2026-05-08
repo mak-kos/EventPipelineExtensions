@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timezone
 
-from store import EventStore, PENDING, PROCESSED
+from event_processor.store import EventStore, PENDING, PROCESSED
 
 
 def test_get_returns_none_for_unknown_event():

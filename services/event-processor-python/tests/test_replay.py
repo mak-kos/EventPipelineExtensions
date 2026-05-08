@@ -8,11 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-import api as api_module
-import health as health_module
-from api import build_app
-from event_api_client import EventNotFound, UpstreamError
-from store import EventStore
+from event_processor import api as api_module
+from event_processor import health as health_module
+from event_processor.api import build_app
+from event_processor.event_api_client import EventNotFound, UpstreamError
+from event_processor.store import EventStore
 
 
 class _FakePublisher:

@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from worker import WorkerPool
+from event_processor.worker import WorkerPool
 
 
 def test_same_key_always_lands_on_same_worker():
