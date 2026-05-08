@@ -24,6 +24,11 @@ public class GlobalExceptionHandler {
         return body(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage());
     }
 
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return body(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
+    }
+
     @ExceptionHandler({
             MethodArgumentTypeMismatchException.class,
             HttpMessageNotReadableException.class,

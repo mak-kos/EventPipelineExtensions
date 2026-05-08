@@ -91,6 +91,14 @@ public class EventService {
         return toResponse(event);
     }
 
+    @Transactional
+    public void deleteById(UUID id) {
+        if (!repository.existsById(id)) {
+            throw new EventNotFoundException(id);
+        }
+        repository.deleteById(id);
+    }
+
     @Transactional(readOnly = true)
     public PageResponse<EventResponse> findAll(String type, Instant from, Instant to,
                                                int page, int size) {
