@@ -30,6 +30,67 @@ Run from each service directory.
 
 ---
 
+## Authentication: obtaining and using a token
+
+Two seeded accounts (override via env in production):
+
+| Username | Password   | Role  |
+| -------- | ---------- | ----- |
+| `user`   | `user123`  | USER  |
+| `admin`  | `admin123` | ADMIN |
+
+```bash
+# 1. Log in — returns { "token": "...", "expiresAt": "..." }
+curl -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"user","password":"user123"}'
+
+# 2. Use the token on protected endpoints
+TOKEN="<paste token from step 1>"
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/events
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/events/<id>
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/stats/summary
+
+# 3. ADMIN-only: delete an event
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/events/<event-uuid>
+```
+
+- **Algorithm:** HS256, signed with `app.jwt.secret` (Base64, decoded must be ≥ 32 bytes).
+- **Lifetime:** `app.jwt.expiration-minutes` (default 60). After expiry the API returns 401; log in again.
+- **Role rules:** `USER` reads `GET /events*` and `GET /stats/*`; `ADMIN` adds `DELETE /events/{id}`. `POST /events` and `POST /auth/login` are open.
+- **Authentication failures all return the same body** (`Invalid username or password`) — deliberately, to avoid username enumeration.
+
+The Postman collection at `postman/EventPipeline.postman_collection.json` automates step 1: running the *POST /auth/login* request stores the token in a collection variable that every protected request below it picks up automatically.
+
+---
+
+## Security posture
+
+### `POST /events` is open — should it be?
+
+The spec says "*`POST /events` (existing) remains open for now — flag this in your README if you think it shouldn't be.*" **It shouldn't.** Anyone on the network can publish arbitrary events into the pipeline; once published they're persisted, indexed, forwarded to Kafka, written to Minio, and exposed by `GET /events` and `/stats/summary`. In a real deployment I would:
+
+1. Add an `INGEST` role (or a separate service-token scope) and protect the endpoint with `requestMatchers(POST, "/events").hasAnyRole("INGEST","ADMIN")`.
+2. Issue a service-account credential to whatever upstream produces events; the Python replay path would carry its own credential rather than reuse a human user.
+3. Validate the inbound JSON against an allow-list of expected `type` values and a payload size cap, so a malicious caller can't fill the table with junk.
+
+Left open here only because the spec asked for it.
+
+### CORS
+
+The API is server-to-server in this repo — no browser frontend is shipped. `SecurityConfig` deliberately does **not** call `http.cors(...)`; with no `CorsConfigurationSource` bean, Spring Security 6 rejects cross-origin browser requests (preflights fail), which is the safe default. I avoided `http.cors(Customizer.withDefaults())` because it picks up whatever a future `WebMvcConfigurer.addCorsMappings` happens to define, which is a common path to accidentally over-permissive CORS. If a browser client is ever added, the right move is a tightly-scoped `CorsConfigurationSource` bean (explicit allowed origins, explicit allowed methods, no `*` with credentials).
+
+### CSRF
+
+Disabled (`csrf.disable()`) because the API is stateless JWT — no cookie session for CSRF to attack. Documented for the reviewer rather than left implicit.
+
+---
+
 ## Design decisions
 
 ### Java
