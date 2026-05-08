@@ -43,5 +43,10 @@ MINIO_SECURE = _env("MINIO_SECURE", "false").lower() == "true"
 HTTP_HOST = _env("HTTP_HOST", "0.0.0.0")
 HTTP_PORT = _env_int("HTTP_PORT", 8081)
 
+# Concurrency
+WORKER_COUNT = _env_int("WORKER_COUNT", 4)
+WORKER_QUEUE_SIZE = _env_int("WORKER_QUEUE_SIZE", 100)
+SHUTDOWN_TIMEOUT_SECONDS = _env_float("SHUTDOWN_TIMEOUT_SECONDS", 30.0)
+
 # Logging
 LOG_LEVEL = _env("LOG_LEVEL", "INFO")
